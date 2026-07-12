@@ -1,0 +1,29 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/world.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/train.gd" id="3"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1")
+
+[node name="World3D" type="SubViewport" parent="."]
+size = Vector2i(640, 360)
+render_target_update_mode = 4
+own_world_3d = true
+
+[node name="World" type="Node3D" parent="World3D"]
+script = ExtResource("2")
+
+[node name="Train" type="Node3D" parent="World3D"]
+script = ExtResource("3")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="Screen" type="TextureRect" parent="HUD"]
+texture_filter = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6

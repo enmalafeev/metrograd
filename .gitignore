@@ -1,0 +1,11 @@
+# Godot 4
+.godot/
+/android/
+/build/
+export_presets.cfg
+
+# Отладочные скриншоты
+/shot_*.png
+
+# macOS
+.DS_Store
