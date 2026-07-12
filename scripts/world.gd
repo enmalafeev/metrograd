@@ -236,10 +236,12 @@ func _compute_stops() -> void:
 		# внешний путь (x=-T) и внутренний (x=+T)
 		stops.append({
 			"name": str(stations[i]["name"]), "idx": i, "terminal": terminal,
+			"x": -T,  # внешний путь → внешняя платформа (side = -1)
 			"offset": _curve.get_closest_offset(Vector3(-T, 0, station_z(i))),
 		})
 		stops.append({
 			"name": str(stations[i]["name"]), "idx": i, "terminal": terminal,
+			"x": T,   # внутренний путь → внутренняя платформа (side = +1)
 			"offset": _curve.get_closest_offset(Vector3(T, 0, station_z(i))),
 		})
 	stops.sort_custom(func(a, b): return a["offset"] < b["offset"])

@@ -7,6 +7,7 @@ const DWELL := 1.5       # задержка "посадка пассажиров
 
 @onready var world: Node3D = $World3D/World
 @onready var train: Node3D = $World3D/Train
+@onready var passengers: Node3D = $World3D/Passengers
 @onready var screen: TextureRect = $HUD/Screen
 
 var lever: Control
@@ -24,6 +25,7 @@ var interior_view := false  # true — камера в салоне, false — �
 func _ready() -> void:
 	screen.texture = $World3D.get_texture()
 	train.setup(world.get_curve(), world.start_offset())
+	passengers.setup(world)
 	_build_hud()
 	_update_hud()
 
@@ -56,6 +58,9 @@ func _toggle_doors() -> void:
 			doors_open = true
 			dwell_ok = false
 			get_tree().create_timer(DWELL).timeout.connect(func() -> void: dwell_ok = true)
+			# посадка/высадка на платформе того пути, у которого стоим
+			var stop: Dictionary = world.stops[next_stop]
+			passengers.board_and_alight(int(stop["idx"]), signi(int(stop["x"])))
 	elif dwell_ok:
 		doors_open = false
 		next_stop = (next_stop + 1) % world.stops.size()   # следующая остановка по кругу

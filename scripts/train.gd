@@ -44,6 +44,8 @@ var _seat: StandardMaterial3D     # сиденья
 var _pole: StandardMaterial3D     # поручни
 var _glow: StandardMaterial3D     # плафоны освещения
 var _dark: StandardMaterial3D     # кабина / тёмные детали
+var _skinm: StandardMaterial3D    # кожа сидящих пассажиров
+var _people: Array[StandardMaterial3D] = []  # цвета одежды пассажиров
 
 func _ready() -> void:
 	_init_materials()
@@ -116,6 +118,14 @@ func _init_materials() -> void:
 	_seat = _flat(Color(0.18, 0.34, 0.62), 0.0, 0.6)
 	_pole = _flat(Color(0.86, 0.72, 0.24), 0.6, 0.3)
 	_dark = _flat(Color(0.13, 0.14, 0.16), 0.0, 0.8)
+	_skinm = _flat(Color(0.9, 0.72, 0.56), 0.0, 0.9)
+	_people = [
+		_flat(Color(0.78, 0.22, 0.22), 0.0, 0.9),
+		_flat(Color(0.20, 0.35, 0.62), 0.0, 0.9),
+		_flat(Color(0.24, 0.52, 0.30), 0.0, 0.9),
+		_flat(Color(0.72, 0.60, 0.18), 0.0, 0.9),
+		_flat(Color(0.45, 0.28, 0.55), 0.0, 0.9),
+	]
 	_glass = StandardMaterial3D.new()
 	_glass.albedo_color = Color(0.45, 0.55, 0.63, 0.30)
 	_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -198,6 +208,8 @@ func _build_salon(car: Node3D, lead: bool) -> void:
 	for sx in [-0.95, 0.95]:
 		for zc in segs:
 			_bench(car, sx, zc)
+			if randf() < 0.55:
+				_rider(car, sx, zc)
 	# поручни-стойки и надпоручень
 	for zc in [-2.6, 0.0, 2.6]:
 		for sx in [-0.5, 0.5]:
@@ -219,6 +231,15 @@ func _build_salon(car: Node3D, lead: bool) -> void:
 func _bench(car: Node3D, sx: float, zc: float) -> void:
 	_box(car, Vector3(0.42, 0.12, 1.9), Vector3(sx, FLOOR + 0.22, zc), _seat)          # сиденье
 	_box(car, Vector3(0.09, 0.46, 1.9), Vector3(sx + signf(sx) * 0.18, FLOOR + 0.5, zc), _seat)  # спинка
+
+func _rider(car: Node3D, sx: float, zc: float) -> void:
+	# сидящий пассажир: спина у борта, ноги свисают к проходу (к меньшему |x|)
+	var shirt := _people[randi() % _people.size()]
+	_box(car, Vector3(0.40, 0.50, 0.26), Vector3(sx * 0.98, 1.12, zc), shirt)   # торс
+	_box(car, Vector3(0.24, 0.26, 0.24), Vector3(sx * 0.98, 1.50, zc), _skinm)  # голова
+	_box(car, Vector3(0.50, 0.16, 0.42), Vector3(sx * 0.72, 0.86, zc), shirt)   # бёдра
+	_box(car, Vector3(0.15, 0.44, 0.15), Vector3(sx * 0.5, 0.56, zc - 0.12), _dark)  # голени
+	_box(car, Vector3(0.15, 0.44, 0.15), Vector3(sx * 0.5, 0.56, zc + 0.12), _dark)
 
 # --- кабина головного вагона ------------------------------------------------
 

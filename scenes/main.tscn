@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/train.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/passengers.gd" id="4"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1")
@@ -17,6 +18,9 @@ script = ExtResource("2")
 
 [node name="Train" type="Node3D" parent="World3D"]
 script = ExtResource("3")
+
+[node name="Passengers" type="Node3D" parent="World3D"]
+script = ExtResource("4")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
