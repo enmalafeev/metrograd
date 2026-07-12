@@ -138,10 +138,11 @@ func _build_tunnel() -> void:
 		_ring(z, _at_station(z), idx)
 		z -= RING
 		idx += 1
-	# таблички станций по центру платформ
+	# названия станций — надписи на самих стенах станции, лицом к путям
 	for i in stations.size():
-		_sign(str(stations[i]["name"]), Vector3(-WALL_X + 0.35, 4.0, station_z(i)))
-		_sign(str(stations[i]["name"]), Vector3(WALL_X - 0.35, 4.0, station_z(i)))
+		var name := str(stations[i]["name"])
+		_sign(name, Vector3(-WALL_X + 0.12, 3.9, station_z(i)), PI * 0.5)   # левая стена → лицом +X
+		_sign(name, Vector3(WALL_X - 0.12, 3.9, station_z(i)), -PI * 0.5)   # правая стена → лицом -X
 
 func _ring(zc: float, st: int, idx: int) -> void:
 	var station := st != -1
@@ -197,16 +198,22 @@ func _light(pos: Vector3, energy: float, color: Color) -> void:
 	o.shadow_enabled = false
 	add_child(o)
 
-func _sign(text: String, pos: Vector3) -> void:
+func _sign(text: String, pos: Vector3, ry: float) -> void:
 	var l := Label3D.new()
 	l.text = text
 	l.font_size = 96
-	l.pixel_size = 0.006
-	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.pixel_size = 0.0065
+	# без billboard — надпись лежит в плоскости стены и повёрнута к путям
+	l.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.modulate = Color(1, 1, 1)
 	l.outline_size = 18
 	l.outline_modulate = Color(0.05, 0.1, 0.25)
+	# смещаем чуть вперёд от плоскости стены, чтобы не было z-fighting
+	l.render_priority = 1
 	l.position = pos
+	l.rotation.y = ry
 	add_child(l)
 
 # --- остановки по кривой ----------------------------------------------------
