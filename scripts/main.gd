@@ -90,7 +90,7 @@ func _build_hud() -> void:
 	$HUD.add_child(hint_label)
 
 	lever = preload("res://scripts/cab_controls.gd").new()
-	lever.position = Vector2(1150, 200)
+	lever.position = Vector2(1120, 190)
 	$HUD.add_child(lever)
 
 	doors_button = Button.new()

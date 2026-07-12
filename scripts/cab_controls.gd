@@ -1,43 +1,68 @@
 extends Control
-## Вертикальный рычаг контроллера машиниста.
-## Вверх — тяга (0..+1), вниз — тормоз (0..-1), отпустил — нейтраль (выбег).
-## Работает и на тач-экране, и мышью.
+## Дискретный контроллер машиниста (реверсор с фиксированными позициями).
+##
+## Рукоятка щёлкает по фиксированным позициям и ОСТАЁТСЯ на выбранной —
+## держать кнопку мыши не нужно. Клик/тап по слайдеру переводит рукоятку
+## в ближайшую позицию; можно и протянуть. main.gd читает поле value.
+##   Ход-1..3 → тяга (0..+1), 0 → выбег (нейтраль), Тормоз-1..3 → торможение (0..-1).
+
+# позиции сверху вниз: 3 хода, нейтраль, 3 тормоза
+const NOTCHES := [1.0, 2.0 / 3.0, 1.0 / 3.0, 0.0, -1.0 / 3.0, -2.0 / 3.0, -1.0]
+const LABELS := ["Х3", "Х2", "Х1", "0", "Т1", "Т2", "Т3"]
+const NEUTRAL := 3       # индекс нейтрали
+const PAD := 26.0        # отступ сверху/снизу до крайних позиций
 
 var value := 0.0
-var _dragging := false
+var _index := NEUTRAL
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(96, 300)
+	custom_minimum_size = Vector2(132, 320)
 	size = custom_minimum_size
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch or event is InputEventMouseButton:
-		if event.pressed:
-			_dragging = true
-			_set_from_y(event.position.y)
-		else:
-			_dragging = false
-			value = 0.0            # пружина в нейтраль
-			queue_redraw()
-	elif _dragging and (event is InputEventScreenDrag or event is InputEventMouseMotion):
+	if (event is InputEventScreenTouch or event is InputEventMouseButton) and event.pressed:
+		_set_from_y(event.position.y)
+	elif event is InputEventScreenDrag:
+		_set_from_y(event.position.y)
+	elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT):
 		_set_from_y(event.position.y)
 
 func _set_from_y(y: float) -> void:
-	var center := size.y * 0.5
-	value = clampf((center - y) / center, -1.0, 1.0)
-	queue_redraw()
+	var usable := size.y - PAD * 2.0
+	var t := clampf((y - PAD) / usable, 0.0, 1.0)   # 0 — верх, 1 — низ
+	var idx := clampi(roundi(t * (NOTCHES.size() - 1)), 0, NOTCHES.size() - 1)
+	if idx != _index:
+		_index = idx
+		value = NOTCHES[_index]
+		queue_redraw()
+
+func _notch_y(i: int) -> float:
+	var usable := size.y - PAD * 2.0
+	return PAD + usable * float(i) / float(NOTCHES.size() - 1)
 
 func _draw() -> void:
 	var w := size.x
-	var h := size.y
+	var top := _notch_y(0)
+	var bot := _notch_y(NOTCHES.size() - 1)
+	var midy := _notch_y(NEUTRAL)
 	# корпус слайдера
-	draw_rect(Rect2(w * 0.32, 0, w * 0.36, h), Color(0.08, 0.09, 0.11))
-	# зона тяги (верх) и торможения (низ)
-	draw_rect(Rect2(w * 0.32, 0, w * 0.36, h * 0.5), Color(0.12, 0.45, 0.18, 0.55))
-	draw_rect(Rect2(w * 0.32, h * 0.5, w * 0.36, h * 0.5), Color(0.55, 0.16, 0.13, 0.55))
-	# центральная риска (нейтраль)
-	draw_rect(Rect2(w * 0.2, h * 0.5 - 2, w * 0.6, 4), Color(0.9, 0.9, 0.5))
-	# рукоятка
-	var ky := (h * 0.5) - value * (h * 0.5)
-	draw_rect(Rect2(w * 0.08, ky - 16, w * 0.84, 32), Color(0.85, 0.86, 0.92))
-	draw_rect(Rect2(w * 0.08, ky - 3, w * 0.84, 6), Color(0.2, 0.2, 0.24))
+	draw_rect(Rect2(w * 0.30, top - 10, w * 0.34, bot - top + 20), Color(0.08, 0.09, 0.11))
+	# зона тяги (сверху) и торможения (снизу)
+	draw_rect(Rect2(w * 0.30, top - 10, w * 0.34, midy - (top - 10)), Color(0.12, 0.45, 0.18, 0.5))
+	draw_rect(Rect2(w * 0.30, midy, w * 0.34, (bot + 10) - midy), Color(0.55, 0.16, 0.13, 0.5))
+	# риски позиций и подписи
+	var font := ThemeDB.fallback_font
+	for i in NOTCHES.size():
+		var y := _notch_y(i)
+		var on := i == _index
+		var neutral := i == NEUTRAL
+		var tick := Color(0.95, 0.9, 0.4) if neutral else Color(0.5, 0.52, 0.58)
+		draw_rect(Rect2(w * 0.2, y - 1.5, w * 0.24, 3), tick)
+		draw_rect(Rect2(w * 0.56, y - 1.5, w * 0.24, 3), tick)
+		var col := Color(1.0, 0.95, 0.6) if on else Color(0.7, 0.72, 0.78)
+		draw_string(font, Vector2(w * 0.82, y + 5), LABELS[i],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, col)
+	# рукоятка на текущей позиции
+	var ky := _notch_y(_index)
+	draw_rect(Rect2(w * 0.12, ky - 13, w * 0.64, 26), Color(0.85, 0.86, 0.92))
+	draw_rect(Rect2(w * 0.12, ky - 3, w * 0.64, 6), Color(0.2, 0.2, 0.24))
