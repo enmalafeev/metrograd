@@ -10,9 +10,9 @@ const T := 3.0               # смещение путей от оси (пути
 const RING := 10.0           # длина сегмента тоннеля, м
 const PLATFORM_HALF := 24.0  # половина длины платформы, м
 const N := 6                 # число станций
-const SP := 120.0            # шаг станций (станция i на z = -SP*i)
+# перегоны между соседними станциями, м (5 перегонов для 6 станций, 0.5–1.0 км)
+const GAPS := [700.0, 1000.0, 550.0, 900.0, 650.0]
 const LEG_NEAR := 40.0       # z ближней петли (за станцией 0)
-const LEG_FAR := -640.0      # z дальней петли (за станцией 5)
 
 const WALL_X := 6.8          # боковые стены
 const CEIL_TUN := 3.8        # высота тоннеля
@@ -30,19 +30,29 @@ var stations := [
 ]
 
 var stops: Array = []        # остановки по кривой: {name, idx, terminal, offset}
+var _zpos: Array = []        # z каждой станции (накопленные перегоны)
+var _leg_far := 0.0          # z дальней петли (за последней станцией)
 var _curve: Curve3D
 var _mats := {}
 
 func _ready() -> void:
+	_compute_layout()
 	_build_env()
 	_build_curve()
 	_build_tunnel()
-	_build_loop(LEG_FAR, -1.0)
+	_build_loop(_leg_far, -1.0)
 	_build_loop(LEG_NEAR, 1.0)
 	_compute_stops()
 
+func _compute_layout() -> void:
+	# станция 0 в z=0, дальше накапливаем перегоны в -Z
+	_zpos = [0.0]
+	for g in GAPS:
+		_zpos.append(_zpos[-1] - float(g))
+	_leg_far = _zpos[-1] - 60.0   # дальняя петля за последней станцией
+
 func station_z(i: int) -> float:
-	return -SP * i
+	return _zpos[i]
 
 func get_curve() -> Curve3D:
 	return _curve
@@ -61,11 +71,11 @@ func _build_curve() -> void:
 	_curve.bake_interval = 0.4
 	# внешний путь (x=-T): от ближней петли к дальней
 	_curve.add_point(Vector3(-T, 0, LEG_NEAR))
-	_curve.add_point(Vector3(-T, 0, LEG_FAR))
+	_curve.add_point(Vector3(-T, 0, _leg_far))
 	# дальняя петля: -X → +X, выпуклостью в -Z
-	_add_arc(LEG_FAR, -1.0)
+	_add_arc(_leg_far, -1.0)
 	# внутренний путь (x=+T): от дальней петли к ближней
-	_curve.add_point(Vector3(T, 0, LEG_FAR))
+	_curve.add_point(Vector3(T, 0, _leg_far))
 	_curve.add_point(Vector3(T, 0, LEG_NEAR))
 	# ближняя петля: +X → -X, выпуклостью в +Z (замыкает маршрут)
 	_add_arc(LEG_NEAR, 1.0)
@@ -134,7 +144,7 @@ func _at_station(zc: float) -> int:
 func _build_tunnel() -> void:
 	var z := LEG_NEAR
 	var idx := 0
-	while z >= LEG_FAR:
+	while z >= _leg_far:
 		_ring(z, _at_station(z), idx)
 		z -= RING
 		idx += 1
