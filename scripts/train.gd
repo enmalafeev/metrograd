@@ -1,6 +1,8 @@
 extends Node3D
 ## Поезд метро: кинематика движения + камера и интерьер кабины.
-## Едет вдоль -Z. throttle и doors_open выставляются извне (main.gd).
+## Движется по замкнутой кривой маршрута (world.get_curve()) по дистанции progress.
+## Разворот на конечных заложен в саму кривую (петли), поэтому поезд всегда едет
+## "вперёд" — направление меняет геометрия пути, а не сам поезд.
 
 const MAX_SPEED := 16.0   # м/с (~58 км/ч)
 const REVERSE_MAX := 3.0
@@ -11,9 +13,19 @@ const ROLL := 0.5         # сопротивление на выбеге
 var speed := 0.0
 var throttle := 0.0       # -1..1: + тяга, - тормоз
 var doors_open := false
+var progress := 0.0       # дистанция вдоль кривой, м
+
+var _curve: Curve3D
+var _len := 0.0
 
 func _ready() -> void:
 	_build_cab()
+
+func setup(curve: Curve3D, start_offset: float) -> void:
+	_curve = curve
+	_len = curve.get_baked_length()
+	progress = start_offset
+	_place()
 
 func _physics_process(delta: float) -> void:
 	var a := 0.0
@@ -37,7 +49,18 @@ func _physics_process(delta: float) -> void:
 	if throttle == 0.0 and not doors_open and absf(speed) < 0.05:
 		speed = 0.0
 	speed = clampf(speed, -REVERSE_MAX, MAX_SPEED)
-	position.z -= speed * delta
+	if _len > 0.0:
+		progress = fposmod(progress + speed * delta, _len)
+		_place()
+
+func _place() -> void:
+	if _curve == null or _len <= 0.0:
+		return
+	var p := _curve.sample_baked(progress)
+	var ahead := _curve.sample_baked(fposmod(progress + 0.6, _len))
+	position = p
+	if p.distance_to(ahead) > 0.001:
+		look_at(ahead, Vector3.UP)
 
 func speed_kmh() -> float:
 	return absf(speed) * 3.6

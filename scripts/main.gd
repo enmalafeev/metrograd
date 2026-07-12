@@ -15,12 +15,13 @@ var station_label: Label
 var hint_label: Label
 var doors_button: Button
 
-var next_idx := 1        # индекс следующей станции (старт на «Восточной» = 0)
+var next_stop := 1       # индекс следующей остановки в world.stops
 var doors_open := false
 var dwell_ok := true     # можно ли уже закрыть двери
 
 func _ready() -> void:
 	screen.texture = $World3D.get_texture()
+	train.setup(world.get_curve(), world.start_offset())
 	_build_hud()
 	_update_hud()
 
@@ -38,11 +39,14 @@ func _process(_delta: float) -> void:
 
 # --- двери / прибытие -------------------------------------------------------
 
+func _remaining() -> float:
+	# знаковая дистанция вдоль кривой до следующей остановки (+ впереди)
+	var off: float = world.stops[next_stop]["offset"]
+	var total: float = world.total_length()
+	return fposmod(off - train.progress + total * 0.5, total) - total * 0.5
+
 func _aligned() -> bool:
-	if next_idx >= world.stations.size():
-		return false
-	var d: float = absf(train.position.z - world.station_z(next_idx))
-	return d <= STOP_TOL and absf(train.speed) < 0.15
+	return absf(_remaining()) <= STOP_TOL and absf(train.speed) < 0.15
 
 func _toggle_doors() -> void:
 	if not doors_open:
@@ -52,7 +56,7 @@ func _toggle_doors() -> void:
 			get_tree().create_timer(DWELL).timeout.connect(func() -> void: dwell_ok = true)
 	elif dwell_ok:
 		doors_open = false
-		next_idx += 1   # едем к следующей станции
+		next_stop = (next_stop + 1) % world.stops.size()   # следующая остановка по кругу
 
 # --- HUD --------------------------------------------------------------------
 
@@ -96,18 +100,14 @@ func _label(font_size: int, color: Color) -> Label:
 
 func _update_hud() -> void:
 	speed_label.text = "%d км/ч" % roundi(train.speed_kmh())
+
 	var stopped: bool = absf(train.speed) < 0.15
-
-	if next_idx >= world.stations.size():
-		station_label.text = "Конечная станция"
-		hint_label.text = "Маршрут завершён"
-		doors_button.disabled = not doors_open
-		return
-
-	var st_name: String = str(world.stations[next_idx]["name"])
-	station_label.text = "Следующая: " + st_name
-	# положительное значение = станция впереди
-	var remaining: float = train.position.z - world.station_z(next_idx)
+	var stop: Dictionary = world.stops[next_stop]
+	var st_name: String = str(stop["name"])
+	var terminal := " (конечная)" if stop["terminal"] else ""
+	station_label.text = "Следующая: " + st_name + terminal
+	# положительное значение = станция впереди по ходу движения
+	var remaining: float = _remaining()
 
 	if doors_open:
 		hint_label.text = "Двери открыты — посадка…" if not dwell_ok else "Двери открыты — нажмите «ДВЕРИ» чтобы закрыть"
