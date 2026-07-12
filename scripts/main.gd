@@ -14,10 +14,12 @@ var speed_label: Label
 var station_label: Label
 var hint_label: Label
 var doors_button: Button
+var view_button: Button
 
 var next_stop := 1       # индекс следующей остановки в world.stops
 var doors_open := false
 var dwell_ok := true     # можно ли уже закрыть двери
+var interior_view := false  # true — камера в салоне, false — в кабине
 
 func _ready() -> void:
 	screen.texture = $World3D.get_texture()
@@ -58,6 +60,11 @@ func _toggle_doors() -> void:
 		doors_open = false
 		next_stop = (next_stop + 1) % world.stops.size()   # следующая остановка по кругу
 
+func _toggle_view() -> void:
+	interior_view = not interior_view
+	train.set_interior_view(interior_view)
+	view_button.text = "В КАБИНУ" if interior_view else "В САЛОН"
+
 # --- HUD --------------------------------------------------------------------
 
 func _build_hud() -> void:
@@ -88,6 +95,14 @@ func _build_hud() -> void:
 	doors_button.add_theme_font_size_override("font_size", 30)
 	doors_button.pressed.connect(_toggle_doors)
 	$HUD.add_child(doors_button)
+
+	view_button = Button.new()
+	view_button.text = "В САЛОН"
+	view_button.position = Vector2(44, 476)
+	view_button.size = Vector2(170, 96)
+	view_button.add_theme_font_size_override("font_size", 26)
+	view_button.pressed.connect(_toggle_view)
+	$HUD.add_child(view_button)
 
 func _label(font_size: int, color: Color) -> Label:
 	var l := Label.new()
