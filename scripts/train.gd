@@ -20,6 +20,7 @@ var _len := 0.0
 
 func _ready() -> void:
 	_build_cab()
+	_build_headlights()
 
 func setup(curve: Curve3D, start_offset: float) -> void:
 	_curve = curve
@@ -64,6 +65,35 @@ func _place() -> void:
 
 func speed_kmh() -> float:
 	return absf(speed) * 3.6
+
+# --- фары -------------------------------------------------------------------
+
+func _build_headlights() -> void:
+	# два прожектора на носу светят вперёд (-Z), освещая тоннель
+	for x in [-0.85, 0.85]:
+		var s := SpotLight3D.new()
+		s.position = Vector3(x, 0.9, -1.7)
+		s.spot_range = 90.0
+		s.spot_angle = 46.0
+		s.spot_attenuation = 0.9
+		s.light_energy = 12.0
+		s.light_color = Color(1.0, 0.95, 0.85)
+		s.rotation.x = deg_to_rad(-3)   # чуть вниз — освещает путь и стены
+		s.shadow_enabled = false
+		add_child(s)
+		# маленькие светящиеся «стёкла» фар
+		var bulb := StandardMaterial3D.new()
+		bulb.albedo_color = Color(1.0, 0.97, 0.85)
+		bulb.emission_enabled = true
+		bulb.emission = Color(1.0, 0.95, 0.8)
+		bulb.emission_energy_multiplier = 3.0
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.28, 0.2, 0.08)
+		mi.mesh = bm
+		mi.material_override = bulb
+		mi.position = Vector3(x, 0.9, -1.72)
+		add_child(mi)
 
 # --- кабина -----------------------------------------------------------------
 
