@@ -28,11 +28,12 @@ var throttle := 0.0       # -1..1: + тяга, - тормоз
 var doors_open := false
 var progress := 0.0       # дистанция центра состава вдоль кривой, м
 
+enum View { CAB, SALON, EXTERIOR, FRONT }  # порядок = индексы кнопок в main.gd
+
 var _curve: Curve3D
 var _len := 0.0
 var _cars: Array[Node3D] = []
-var _cab_cam: Camera3D      # вид из кабины машиниста
-var _salon_cam: Camera3D    # вид в салоне вагона
+var _cams: Array[Camera3D] = [null, null, null, null]  # камеры видов, индекс = View
 
 # --- материалы --------------------------------------------------------------
 var _ext: StandardMaterial3D      # кузов
@@ -191,6 +192,8 @@ func _build_car(car: Node3D, lead: bool) -> void:
 		_build_cab(car)
 		_build_headlights(car)
 		_build_salon_camera(car)
+		_build_exterior_camera(car)
+		_build_front_camera(car)
 
 func _build_end(car: Node3D, z: float) -> void:
 	_box(car, Vector3(2.5, ROOF - 0.14 - FLOOR, 0.08), Vector3(0, (FLOOR + ROOF - 0.14) * 0.5, z), _ext)
@@ -251,7 +254,7 @@ func _build_cab(car: Node3D) -> void:
 	cam.position = Vector3(0, 1.5, CAB_Z)
 	cam.rotation = Vector3(deg_to_rad(-6), 0, 0)  # слегка вниз — видно пульт
 	car.add_child(cam)
-	_cab_cam = cam
+	_cams[View.CAB] = cam
 
 	var panel := StandardMaterial3D.new()
 	panel.albedo_texture = load("res://assets/textures/cab_panel.png")
@@ -291,14 +294,42 @@ func _build_salon_camera(car: Node3D) -> void:
 	cam.position = Vector3(0.0, 1.68, CAB_Z + 1.6)  # чуть позади перегородки кабины
 	cam.rotation = Vector3(deg_to_rad(-3), deg_to_rad(180), 0)  # взгляд в сторону хвоста
 	car.add_child(cam)
-	_salon_cam = cam
+	_cams[View.SALON] = cam
 
-## Переключает активную камеру: true — салон, false — кабина.
-func set_interior_view(on: bool) -> void:
-	if _cab_cam == null or _salon_cam == null:
-		return
-	_salon_cam.current = on
-	_cab_cam.current = not on
+# --- внешние камеры ---------------------------------------------------------
+
+func _build_exterior_camera(car: Node3D) -> void:
+	# Снаружи: позади хвоста, сбоку и выше уровня крыши, смотрит вперёд вдоль
+	# состава (обзор всего поезда в тоннеле). Крепится к головному вагону —
+	# едет вместе с поездом, хвост тянется к ней в +Z локального пространства.
+	var cam := Camera3D.new()
+	cam.name = "ExteriorCamera"
+	cam.current = false
+	cam.fov = 70.0
+	cam.position = Vector3(1.8, 3.1, 46.0)              # позади хвоста, сбоку, выше крыши
+	cam.rotation = Vector3(deg_to_rad(-6), deg_to_rad(7), 0)  # чуть вниз и внутрь — 3/4 обзор
+	car.add_child(cam)
+	_cams[View.EXTERIOR] = cam
+
+func _build_front_camera(car: Node3D) -> void:
+	# Railfan-вид: камера на носу головного вагона, смотрит вперёд по ходу —
+	# убегающий тоннель, рельсы и освещённый фарами путь (как «трейнспоттинг»
+	# из передней точки поезда). Направление движения — локальный -Z.
+	var cam := Camera3D.new()
+	cam.name = "FrontCamera"
+	cam.current = false
+	cam.fov = 74.0
+	var nose := -HALF + 0.05
+	cam.position = Vector3(0.0, 1.55, nose - 0.5)      # чуть впереди носа, на уровне окон
+	cam.rotation = Vector3(deg_to_rad(-4), 0, 0)       # взгляд вперёд, слегка вниз на путь
+	car.add_child(cam)
+	_cams[View.FRONT] = cam
+
+## Делает активной камеру выбранного вида (индекс из View).
+func set_view(v: int) -> void:
+	for i in _cams.size():
+		if _cams[i] != null:
+			_cams[i].current = (i == v)
 
 # --- фары --------------------------------------------------------------------
 

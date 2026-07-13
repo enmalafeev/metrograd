@@ -4,6 +4,7 @@ extends Node
 const STOP_TOL := 8.0    # допуск точной остановки у центра платформы, м
 const PLAT_TOL := 14.0   # в пределах платформы, но не по центру
 const DWELL := 1.5       # задержка "посадка пассажиров" перед закрытием дверей
+const VIEWS := ["КАБИНА", "САЛОН", "СНАРУЖИ", "СПЕРЕДИ"]  # подписи кнопок, индекс = train.View
 
 @onready var world: Node3D = $World3D/World
 @onready var train: Node3D = $World3D/Train
@@ -15,12 +16,12 @@ var speed_label: Label
 var station_label: Label
 var hint_label: Label
 var doors_button: Button
-var view_button: Button
+var view_buttons: Array[Button] = []
 
 var next_stop := 1       # индекс следующей остановки в world.stops
 var doors_open := false
 var dwell_ok := true     # можно ли уже закрыть двери
-var interior_view := false  # true — камера в салоне, false — в кабине
+var view_index := 0      # текущий вид камеры (индекс в VIEWS / train.View)
 
 func _ready() -> void:
 	screen.texture = $World3D.get_texture()
@@ -65,10 +66,12 @@ func _toggle_doors() -> void:
 		doors_open = false
 		next_stop = (next_stop + 1) % world.stops.size()   # следующая остановка по кругу
 
-func _toggle_view() -> void:
-	interior_view = not interior_view
-	train.set_interior_view(interior_view)
-	view_button.text = "В КАБИНУ" if interior_view else "В САЛОН"
+func _set_view(i: int) -> void:
+	view_index = i
+	train.set_view(i)
+	for j in view_buttons.size():
+		# подсветка активной кнопки
+		view_buttons[j].modulate = Color(1.0, 0.85, 0.35) if j == i else Color(1, 1, 1)
 
 # --- HUD --------------------------------------------------------------------
 
@@ -101,13 +104,17 @@ func _build_hud() -> void:
 	doors_button.pressed.connect(_toggle_doors)
 	$HUD.add_child(doors_button)
 
-	view_button = Button.new()
-	view_button.text = "В САЛОН"
-	view_button.position = Vector2(44, 476)
-	view_button.size = Vector2(170, 96)
-	view_button.add_theme_font_size_override("font_size", 26)
-	view_button.pressed.connect(_toggle_view)
-	$HUD.add_child(view_button)
+	# кнопки переключения вида камеры (кабина / салон / снаружи / спереди)
+	for i in VIEWS.size():
+		var b := Button.new()
+		b.text = VIEWS[i]
+		b.position = Vector2(44, 236 + i * 62)
+		b.size = Vector2(170, 54)
+		b.add_theme_font_size_override("font_size", 24)
+		b.pressed.connect(_set_view.bind(i))
+		$HUD.add_child(b)
+		view_buttons.append(b)
+	_set_view(0)
 
 func _label(font_size: int, color: Color) -> Label:
 	var l := Label.new()
