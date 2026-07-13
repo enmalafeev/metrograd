@@ -22,10 +22,12 @@ const FLOOR := 0.5        # уровень пола салона, м
 const WIN_BOT := 1.15     # низ оконной ленты
 const WIN_TOP := 2.05     # верх оконной ленты
 const CAB_Z := -HALF + 1.6  # позиция машиниста в головном вагоне (локальная z)
+const DOOR_W := 1.3         # ширина дверного проёма, м
+const DOOR_SLIDE := 0.6     # ход одной створки при открытии, м
 
 var speed := 0.0
 var throttle := 0.0       # -1..1: + тяга, - тормоз
-var doors_open := false
+var doors_open := false: set = _set_doors_open
 var progress := 0.0       # дистанция центра состава вдоль кривой, м
 
 enum View { CAB, SALON, EXTERIOR, FRONT }  # порядок = индексы кнопок в main.gd
@@ -34,6 +36,7 @@ var _curve: Curve3D
 var _len := 0.0
 var _cars: Array[Node3D] = []
 var _cams: Array[Camera3D] = [null, null, null, null]  # камеры видов, индекс = View
+var _doors: Array = []    # створки платформенной стороны: {node, closed, open, tween}
 
 # --- материалы --------------------------------------------------------------
 var _ext: StandardMaterial3D      # кузов
@@ -109,6 +112,28 @@ func _sample(o: float) -> Vector3:
 func speed_kmh() -> float:
 	return absf(speed) * 3.6
 
+# --- двери вагонов ----------------------------------------------------------
+
+func _set_doors_open(v: bool) -> void:
+	if v == doors_open:
+		return
+	doors_open = v
+	_animate_doors(v)
+
+## Плавно раздвигает (open) или сдвигает створки платформенной стороны.
+func _animate_doors(open: bool) -> void:
+	for d in _doors:
+		var node: Node3D = d["node"]
+		if not is_instance_valid(node):
+			continue
+		if d.has("tween") and d["tween"] != null and d["tween"].is_valid():
+			d["tween"].kill()
+		var target_z: float = d["open"] if open else d["closed"]
+		var tw := create_tween()
+		tw.tween_property(node, "position:z", target_z, 0.55) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		d["tween"] = tw
+
 # --- материалы --------------------------------------------------------------
 
 func _init_materials() -> void:
@@ -166,20 +191,25 @@ func _build_car(car: Node3D, lead: bool) -> void:
 	_box(car, Vector3(2.5, 0.14, body_len), Vector3(0, ROOF - 0.07, 0), _ext)
 
 	for sx in [-HW, HW]:
-		# цветная полоса по борту (снаружи, под окнами)
-		_box(car, Vector3(0.06, 0.16, body_len), Vector3(sx * 1.03, WIN_BOT - 0.1, 0), _trim)
-		# юбка под окнами
-		_box(car, Vector3(0.08, WIN_BOT - FLOOR, body_len), Vector3(sx, (FLOOR + WIN_BOT) * 0.5, 0), _ext)
-		# надоконный пояс
+		var platform: bool = sx < 0.0   # платформенная (левая по ходу) сторона — с проёмами
+		# надоконный пояс-перемычка над дверьми — сплошной с обеих сторон
 		_box(car, Vector3(0.08, ROOF - 0.14 - WIN_TOP, body_len), Vector3(sx, (WIN_TOP + ROOF - 0.14) * 0.5, 0), _ext)
-		# оконная лента (стекло)
-		_box(car, Vector3(0.05, WIN_TOP - WIN_BOT, body_len), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, 0), _glass)
-		# оконные стойки
+		# борт под окнами и оконная лента: на платформенной стороне разорваны под
+		# дверные проёмы, чтобы через открытые двери был виден перрон из салона
+		for seg in _side_segments(body_len * 0.5, platform):
+			var z0: float = seg[0]
+			var z1: float = seg[1]
+			var zc := (z0 + z1) * 0.5
+			var ln := z1 - z0
+			_box(car, Vector3(0.06, 0.16, ln), Vector3(sx * 1.03, WIN_BOT - 0.1, zc), _trim)                    # цветная полоса
+			_box(car, Vector3(0.08, WIN_BOT - FLOOR, ln), Vector3(sx, (FLOOR + WIN_BOT) * 0.5, zc), _ext)       # юбка
+			_box(car, Vector3(0.05, WIN_TOP - WIN_BOT, ln), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, zc), _glass) # стекло
+		# оконные стойки (в глухих оконных секциях, вне проёмов)
 		for mz in [-3.3, -1.1, 1.1, 3.3]:
 			_box(car, Vector3(0.1, WIN_TOP - WIN_BOT, 0.12), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, mz), _ext)
 		# двери (по две с каждой стороны, у платформы)
 		for dz in [-2.6, 2.6]:
-			_box(car, Vector3(0.06, WIN_TOP - 0.15, 1.3), Vector3(sx * 1.01, (FLOOR + WIN_TOP) * 0.5 + 0.05, dz), _door)
+			_build_door(car, sx, dz)
 
 	# торцы вагона с дверью в переход (у головного передний торец открыт под кабину)
 	_build_end(car, HALF - 0.05)
@@ -198,6 +228,27 @@ func _build_car(car: Node3D, lead: bool) -> void:
 func _build_end(car: Node3D, z: float) -> void:
 	_box(car, Vector3(2.5, ROOF - 0.14 - FLOOR, 0.08), Vector3(0, (FLOOR + ROOF - 0.14) * 0.5, z), _ext)
 	_box(car, Vector3(0.85, 1.7, 0.04), Vector3(0, FLOOR + 0.85, z), _dark)   # дверь перехода
+
+func _side_segments(half: float, platform: bool) -> Array:
+	# Интервалы борта вдоль z. На платформенной стороне вырезаны проёмы под двери
+	# (dz=±2.6), поэтому борт строится тремя кусками; иначе — цельный борт.
+	if not platform:
+		return [[-half, half]]
+	var hw := DOOR_W * 0.5
+	return [[-half, -2.6 - hw], [-2.6 + hw, 2.6 - hw], [2.6 + hw, half]]
+
+func _build_door(car: Node3D, sx: float, dz: float) -> void:
+	# Двухстворчатая дверь: две створки сходятся по центру проёма (dz).
+	# Створки платформенной (левой по ходу, sx<0) стороны запоминаются для
+	# анимации — именно они открываются, когда поезд стоит у платформы.
+	var y := (FLOOR + WIN_TOP) * 0.5 + 0.05
+	var h := WIN_TOP - 0.15
+	var leaf_w := DOOR_W * 0.5 - 0.02
+	for s: float in [-1.0, 1.0]:
+		var closed_z := dz + s * DOOR_W * 0.25
+		var leaf := _box(car, Vector3(0.06, h, leaf_w), Vector3(sx * 1.01, y, closed_z), _door)
+		if sx < 0.0:
+			_doors.append({"node": leaf, "closed": closed_z, "open": closed_z + s * DOOR_SLIDE})
 
 func _build_salon(car: Node3D, lead: bool) -> void:
 	var front := -2.4 if lead else -HALF + 0.6   # у головного салон за кабиной
