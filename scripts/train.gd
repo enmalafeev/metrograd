@@ -30,17 +30,19 @@ var throttle := 0.0       # -1..1: + тяга, - тормоз
 var doors_open := false: set = _set_doors_open
 var progress := 0.0       # дистанция центра состава вдоль кривой, м
 
-enum View { CAB, SALON, EXTERIOR, FRONT }  # порядок = индексы кнопок в main.gd
+enum View { CAB, SALON, EXTERIOR, FRONT, FACE }  # порядок = индексы кнопок в main.gd
 
 var _curve: Curve3D
 var _len := 0.0
 var _cars: Array[Node3D] = []
-var _cams: Array[Camera3D] = [null, null, null, null]  # камеры видов, индекс = View
+var _cams: Array[Camera3D] = [null, null, null, null, null]  # камеры видов, индекс = View
 var _doors: Array = []    # створки платформенной стороны: {node, closed, open, tween}
 
 # --- материалы --------------------------------------------------------------
-var _ext: StandardMaterial3D      # кузов
-var _trim: StandardMaterial3D     # цветная полоса
+var _ext: StandardMaterial3D      # кузов (светло-серо-голубой)
+var _skirt: StandardMaterial3D    # тёмно-синяя юбка/низ борта
+var _trim: StandardMaterial3D     # синяя поясная полоса
+var _red: StandardMaterial3D      # красная маска передка головного вагона
 var _glass: StandardMaterial3D    # окна
 var _door: StandardMaterial3D     # двери
 var _floor: StandardMaterial3D    # пол салона
@@ -137,9 +139,11 @@ func _animate_doors(open: bool) -> void:
 # --- материалы --------------------------------------------------------------
 
 func _init_materials() -> void:
-	_ext = _flat(Color(0.62, 0.65, 0.72), 0.4, 0.35)
-	_trim = _flat(Color(0.78, 0.16, 0.19), 0.2, 0.4)
-	_door = _flat(Color(0.28, 0.32, 0.38), 0.3, 0.35)
+	_ext = _flat(Color(0.66, 0.71, 0.76), 0.35, 0.4)     # светло-серо-голубой стальной кузов (Еж3)
+	_skirt = _flat(Color(0.13, 0.24, 0.46), 0.2, 0.45)   # тёмно-синяя юбка
+	_trim = _flat(Color(0.17, 0.36, 0.64), 0.2, 0.45)    # синяя поясная полоса
+	_red = _flat(Color(0.66, 0.15, 0.16), 0.1, 0.5)      # красная маска передка
+	_door = _flat(Color(0.58, 0.63, 0.69), 0.25, 0.4)    # двери в цвет кузова, чуть светлее
 	_floor = _flat(Color(0.17, 0.18, 0.21), 0.0, 0.9)
 	_seat = _flat(Color(0.18, 0.34, 0.62), 0.0, 0.6)
 	_pole = _flat(Color(0.86, 0.72, 0.24), 0.6, 0.3)
@@ -201,9 +205,12 @@ func _build_car(car: Node3D, lead: bool) -> void:
 			var z1: float = seg[1]
 			var zc := (z0 + z1) * 0.5
 			var ln := z1 - z0
-			_box(car, Vector3(0.06, 0.16, ln), Vector3(sx * 1.03, WIN_BOT - 0.1, zc), _trim)                    # цветная полоса
-			_box(car, Vector3(0.08, WIN_BOT - FLOOR, ln), Vector3(sx, (FLOOR + WIN_BOT) * 0.5, zc), _ext)       # юбка
-			_box(car, Vector3(0.05, WIN_TOP - WIN_BOT, ln), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, zc), _glass) # стекло
+			_box(car, Vector3(0.06, 0.16, ln), Vector3(sx * 1.03, WIN_BOT - 0.1, zc), _trim)                     # синяя поясная полоса
+			_box(car, Vector3(0.08, WIN_BOT - FLOOR, ln), Vector3(sx, (FLOOR + WIN_BOT) * 0.5, zc), _skirt)      # тёмно-синяя юбка
+			_box(car, Vector3(0.05, WIN_TOP - WIN_BOT, ln), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, zc), _glass)  # стекло
+			# горизонтальные рёбра гофра по низу борта
+			for ry in [FLOOR + 0.18, FLOOR + 0.42]:
+				_box(car, Vector3(0.03, 0.05, ln), Vector3(sx * 1.04, ry, zc), _ext)
 		# оконные стойки (в глухих оконных секциях, вне проёмов)
 		for mz in [-3.3, -1.1, 1.1, 3.3]:
 			_box(car, Vector3(0.1, WIN_TOP - WIN_BOT, 0.12), Vector3(sx, (WIN_BOT + WIN_TOP) * 0.5, mz), _ext)
@@ -219,11 +226,13 @@ func _build_car(car: Node3D, lead: bool) -> void:
 	_build_salon(car, lead)
 
 	if lead:
+		_build_front_face(car)
 		_build_cab(car)
 		_build_headlights(car)
 		_build_salon_camera(car)
 		_build_exterior_camera(car)
 		_build_front_camera(car)
+		_build_face_camera(car)
 
 func _build_end(car: Node3D, z: float) -> void:
 	_box(car, Vector3(2.5, ROOF - 0.14 - FLOOR, 0.08), Vector3(0, (FLOOR + ROOF - 0.14) * 0.5, z), _ext)
@@ -294,6 +303,36 @@ func _rider(car: Node3D, sx: float, zc: float) -> void:
 	_box(car, Vector3(0.50, 0.16, 0.42), Vector3(sx * 0.72, 0.86, zc), shirt)   # бёдра
 	_box(car, Vector3(0.15, 0.44, 0.15), Vector3(sx * 0.5, 0.56, zc - 0.12), _dark)  # голени
 	_box(car, Vector3(0.15, 0.44, 0.15), Vector3(sx * 0.5, 0.56, zc + 0.12), _dark)
+
+# --- передок головного вагона (морда Еж3) -----------------------------------
+
+func _build_front_face(car: Node3D) -> void:
+	# Характерная «морда» Еж3: два лобовых окна кабины, номерное табло между
+	# ними, красная нижняя маска и две круглые фары. z=-HALF — передний торец.
+	var z := -HALF + 0.1
+	var win0 := 1.35            # низ лобовых окон
+	var win1 := 2.35            # верх лобовых окон
+	var top := ROOF - 0.14
+	# красная нижняя маска
+	_box(car, Vector3(2.5, win0 - FLOOR, 0.1), Vector3(0, (FLOOR + win0) * 0.5, z), _red)
+	# надоконная перемычка (в цвет кузова)
+	_box(car, Vector3(2.5, top - win1, 0.1), Vector3(0, (win1 + top) * 0.5, z), _ext)
+	# два лобовых стекла
+	var wy := (win0 + win1) * 0.5
+	var wh := win1 - win0 - 0.08
+	_box(car, Vector3(0.9, wh, 0.05), Vector3(-0.62, wy, z - 0.03), _glass)
+	_box(car, Vector3(0.9, wh, 0.05), Vector3(0.62, wy, z - 0.03), _glass)
+	# центральная стойка с номерным табло и боковые стойки
+	_box(car, Vector3(0.42, win1 - win0, 0.12), Vector3(0, wy, z - 0.01), _ext)
+	_box(car, Vector3(0.12, win1 - win0, 0.12), Vector3(-1.16, wy, z - 0.01), _ext)
+	_box(car, Vector3(0.12, win1 - win0, 0.12), Vector3(1.16, wy, z - 0.01), _ext)
+	# номерное табло — светящийся квадратик на центральной стойке
+	var route := StandardMaterial3D.new()
+	route.albedo_color = Color(0.95, 0.85, 0.45)
+	route.emission_enabled = true
+	route.emission = Color(1.0, 0.85, 0.4)
+	route.emission_energy_multiplier = 2.2
+	_box(car, Vector3(0.3, 0.22, 0.05), Vector3(0, win1 - 0.02, z - 0.05), route)
 
 # --- кабина головного вагона ------------------------------------------------
 
@@ -375,6 +414,18 @@ func _build_front_camera(car: Node3D) -> void:
 	cam.rotation = Vector3(deg_to_rad(-4), 0, 0)       # взгляд вперёд, слегка вниз на путь
 	car.add_child(cam)
 	_cams[View.FRONT] = cam
+
+func _build_face_camera(car: Node3D) -> void:
+	# Снаружи впереди и чуть сбоку — обзор «морды» головного вагона в три
+	# четверти (лобовые окна, номерное табло, фары). Наведена на нос вагона.
+	var cam := Camera3D.new()
+	cam.name = "FaceCamera"
+	cam.current = false
+	cam.fov = 58.0
+	cam.position = Vector3(3.0, 2.1, -HALF - 8.5)       # впереди носа и сбоку
+	car.add_child(cam)
+	cam.look_at(Vector3(0.0, 1.35, -HALF + 0.1), Vector3.UP)  # прицел на морду
+	_cams[View.FACE] = cam
 
 ## Делает активной камеру выбранного вида (индекс из View).
 func set_view(v: int) -> void:

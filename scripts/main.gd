@@ -4,7 +4,7 @@ extends Node
 const STOP_TOL := 8.0    # допуск точной остановки у центра платформы, м
 const PLAT_TOL := 14.0   # в пределах платформы, но не по центру
 const DWELL := 1.5       # задержка "посадка пассажиров" перед закрытием дверей
-const VIEWS := ["КАБИНА", "САЛОН", "СНАРУЖИ", "СПЕРЕДИ"]  # подписи кнопок, индекс = train.View
+const VIEWS := ["КАБИНА", "САЛОН", "СНАРУЖИ", "СПЕРЕДИ", "МОРДА"]  # подписи кнопок, индекс = train.View
 
 @onready var world: Node3D = $World3D/World
 @onready var train: Node3D = $World3D/Train
